@@ -1,4 +1,3 @@
-
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { createClient } from '@supabase/supabase-js';
 import ChatPage from '@/components/ChatPage';
@@ -13,10 +12,15 @@ export const supabase = createClient(
 function App() {
   return (
     <BrowserRouter>
+      <nav className="flex gap-4 p-4 bg-gray-100 justify-center">
+        <a href="/chat" className="text-blue-600 font-semibold hover:underline">🤖 Chat Tronix</a>
+        <a href="/dashboards" className="text-blue-600 font-semibold hover:underline">📊 Mis Dashboards</a>
+      </nav>
+
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/chat" element={<ChatPage />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/dashboards" element={<DashboardPage />} />
       </Routes>
     </BrowserRouter>
   );
