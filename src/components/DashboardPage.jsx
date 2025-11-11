@@ -1929,47 +1929,32 @@ const deleteDashboardFallback = async (dashboardId) => {
       throw new Error('Sin permisos para eliminar este dashboard');
     }
 
-    const graficoId = dashboardData.grafico_id;
-    console.log('🎯 Dashboard encontrado, gráfico ID:', graficoId);
-
-    // Eliminar la relación en dashboard primero
-    const { error: dashboardDeleteError } = await supabase
-      .from('dashboard')
-      .delete()
-      .eq('id', dashboardId)
-      .eq('user_id', user.id);
-
-    if (dashboardDeleteError) {
-      console.error('❌ Error al eliminar dashboard:', dashboardDeleteError);
-      throw new Error('Error al eliminar dashboard: ' + dashboardDeleteError.message);
-    }
-
-    console.log('✅ Dashboard eliminado');
-
-    // Luego eliminar el gráfico
-    const { error: graficoDeleteError } = await supabase
+    // 🔥 Eliminar el gráfico asociado
+    const { error: deleteGraficoError } = await supabase
       .from('graficos')
       .delete()
-      .eq('id', graficoId);
+      .eq('id', dashboardData.grafico_id);
 
-    if (graficoDeleteError) {
-      console.error('❌ Error al eliminar gráfico:', graficoDeleteError);
-      // No lanzar error aquí, ya eliminamos el dashboard
-      console.warn('⚠️ Dashboard eliminado pero gráfico quedó huérfano');
-    } else {
-      console.log('✅ Gráfico eliminado');
+    if (deleteGraficoError) {
+      console.error('❌ Error al eliminar gráfico:', deleteGraficoError);
+      throw new Error('Error al eliminar gráfico: ' + deleteGraficoError.message);
     }
 
-    // Refrescar la vista
-    if (currentCategory) {
-      await fetchDashboardsByCategory(currentCategory.id);
+    // 🧱 Eliminar el registro del dashboard
+    const { error: deleteDashboardError } = await supabase
+      .from('dashboard')
+      .delete()
+      .eq('id', dashboardId);
+
+    if (deleteDashboardError) {
+      console.error('❌ Error al eliminar dashboard:', deleteDashboardError);
+      throw new Error('Error al eliminar dashboard: ' + deleteDashboardError.message);
     }
-    
-    alert('¡Gráfico eliminado exitosamente!');
-    
-  } catch (err) {
-    console.error('❌ Error en método fallback:', err);
-    alert('Error al eliminar gráfico: ' + err.message);
+
+    alert('✅ Dashboard eliminado correctamente');
+  } catch (error) {
+    console.error('⚠️ Error en deleteDashboardFallback:', error.message);
+    alert('Error: ' + error.message);
   }
 };
 
