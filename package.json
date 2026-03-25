@@ -5,6 +5,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
+    "start": "serve dist --listen $PORT"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.4",
