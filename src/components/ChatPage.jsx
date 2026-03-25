@@ -8,7 +8,7 @@ import ChartInline from '../components/ChartInline';
 
 // 🌐 ENDPOINT DEL AGENTE
 const WEBHOOK_URL =
-  'https://n8n-production-04fe9.up.railway.app/webhook/01103618-3424-4455-bde6-aa8d295157b2';
+  'https://n8n-production-04fe9.up.railway.app/webhook/1';
 
 export default function ChatPage() {
   const [input, setInput] = useState('');
