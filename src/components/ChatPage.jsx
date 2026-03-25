@@ -7,8 +7,7 @@ import ChartFromSQL from '../components/ChartFromSQL';
 import ChartInline from '../components/ChartInline';
 
 // 🌐 ENDPOINT DEL AGENTE
-const WEBHOOK_URL =
-  'https://n8n-production-04fe9.up.railway.app/webhook/6cc5b68c-59b2-4840-b489-e8e92b36e25a';
+const WEBHOOK_URL = '/api/webhook';
 
 export default function ChatPage() {
   const [input, setInput] = useState('');
