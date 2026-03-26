@@ -1,10 +1,8 @@
-import express from 'express';
-import { createProxyMiddleware } from 'http-proxy-middleware';
-import path from 'path';
-import { fileURLToPath } from 'url';
+const express = require('express');
+const { createProxyMiddleware } = require('http-proxy-middleware');
+const path = require('path');
 
 const app = express();
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 app.use('/api/webhook', createProxyMiddleware({
   target: 'https://n8n-production-04fe9.up.railway.app',
@@ -15,6 +13,7 @@ app.use('/api/webhook', createProxyMiddleware({
 }));
 
 app.use(express.static(path.join(__dirname, 'dist')));
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
