@@ -4,12 +4,6 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "npx serve dist --listen $PORT",
-    "rewrites": [
-      {
-        "source": "/api/webhook",
-        "destination": "https://n8n-production-04fe9.up.railway.app/webhook/6cc5b68c-59b2-4840-b489-e8e92b36e25a"
-      }
-    ]
+    "startCommand": "node server.js"
   }
 }
