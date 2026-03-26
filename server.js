@@ -7,8 +7,11 @@ const app = express();
 app.use('/api/webhook', createProxyMiddleware({
   target: 'https://n8n-production-04fe9.up.railway.app',
   changeOrigin: true,
-  pathRewrite: {
-    '^/api/webhook': '/webhook/6cc5b68c-59b2-4840-b489-e8e92b36e25a'
+  pathRewrite: { '^/api/webhook': '/webhook/6cc5b68c-59b2-4840-b489-e8e92b36e25a' },
+  on: {
+    proxyReq: (proxyReq, req, res) => {
+      console.log('Proxying to:', proxyReq.path);
+    }
   }
 }));
 
