@@ -5,12 +5,16 @@ const path = require('path');
 const app = express();
 
 app.use('/api/webhook', createProxyMiddleware({
-  target: 'https://n8n-production-04fe9.up.railway.app',
+  target: 'https://n8n-production-04fe9.up.railway.app/webhook/6cc5b68c-59b2-4840-b489-e8e92b36e25a',
   changeOrigin: true,
-  pathRewrite: { '^/api/webhook': '/webhook/6cc5b68c-59b2-4840-b489-e8e92b36e25a' },
+  ignorePath: true,
   on: {
     proxyReq: (proxyReq, req, res) => {
-      console.log('Proxying to:', proxyReq.path);
+      console.log('Proxying to n8n...');
+    },
+    error: (err, req, res) => {
+      console.error('Proxy error:', err);
+      res.status(500).send('Proxy error');
     }
   }
 }));
