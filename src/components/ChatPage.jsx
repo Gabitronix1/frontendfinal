@@ -149,6 +149,8 @@ export default function ChatPage() {
       const { data: raw } = await axios.post(WEBHOOK_URL, {
         message: input,
         sessionId: sessionStorage.getItem('sessionId'),
+      }, {
+        baseURL: window.location.origin
       });
 
       // 🔍 Algunos n8n workflows devuelven { response: ... }
