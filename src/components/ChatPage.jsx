@@ -16,7 +16,7 @@ export default function ChatPage() {
   const [frequentQuestions, setFrequentQuestions] = useState([]);
   const chatEndRef = useRef(null);
 
-  // Estados para el selector de categorías
+  // 🆕 Estados para el selector de categorías
   const [categories, setCategories] = useState([]);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [currentChartToSave, setCurrentChartToSave] = useState(null);
@@ -33,6 +33,9 @@ export default function ChatPage() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  /* --------------------------------------------------
+   *  🔄  INIT – SESSION ID & PREGUNTAS FRECUENTES
+   * -------------------------------------------------- */
   useEffect(() => {
     if (!sessionStorage.getItem('sessionId')) {
       sessionStorage.setItem('sessionId', crypto.randomUUID());
@@ -42,35 +45,59 @@ export default function ChatPage() {
   useEffect(scrollToBottom, [messages]);
 
   const fetchFrequentQuestions = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return;
+
     const { data, error } = await supabase
       .from('preguntas_frecuentes')
       .select('*')
       .eq('user_id', user.id)
       .order('fecha_creacion', { ascending: false });
+
     if (!error) setFrequentQuestions(data);
   };
 
+  // 🆕 Función para obtener categorías del usuario
   const fetchCategories = async () => {
     try {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) return;
+      
+      if (userError || !user) {
+        console.error('Usuario no autenticado');
+        return;
+      }
+
       const { data, error } = await supabase.rpc('get_dashboard_categories_with_count', {
         user_uuid: user.id
       });
-      if (error) { console.error('Error al obtener categorías:', error); return; }
+
+      if (error) {
+        console.error('Error al obtener categorías:', error);
+        return;
+      }
+
       setCategories(data || []);
     } catch (err) {
       console.error('Error en fetchCategories:', err);
     }
   };
 
+  // 🆕 Función para crear nueva categoría
   const createCategory = async () => {
     try {
-      if (!newCategory.name.trim()) { alert('Por favor ingresa un nombre para la categoría'); return; }
+      if (!newCategory.name.trim()) {
+        alert('Por favor ingresa un nombre para la categoría');
+        return;
+      }
+
       const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) throw new Error('Usuario no autenticado');
+      
+      if (userError || !user) {
+        throw new Error('Usuario no autenticado');
+      }
+
       const { data, error } = await supabase.rpc('create_dashboard_category', {
         user_uuid: user.id,
         category_name: newCategory.name,
@@ -78,10 +105,21 @@ export default function ChatPage() {
         category_description: newCategory.description,
         category_color: newCategory.color
       });
-      if (error) throw new Error('Error al crear categoría: ' + error.message);
-      setNewCategory({ name: '', icon: '📊', description: '', color: '#3B82F6' });
+
+      if (error) {
+        throw new Error('Error al crear categoría: ' + error.message);
+      }
+
+      // Resetear formulario y recargar categorías
+      setNewCategory({
+        name: '',
+        icon: '📊',
+        description: '',
+        color: '#3B82F6'
+      });
       setShowCreateCategory(false);
       await fetchCategories();
+      
     } catch (err) {
       console.error('Error al crear categoría:', err);
       alert('Error al crear categoría: ' + err.message);
@@ -90,7 +128,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     fetchFrequentQuestions();
-    fetchCategories();
+    fetchCategories(); // 🆕 Cargar categorías al inicio
   }, []);
 
   /* --------------------------------------------------
@@ -98,21 +136,38 @@ export default function ChatPage() {
    * -------------------------------------------------- */
   const handleSend = async () => {
     if (!input.trim()) return;
-    const newUserMsg = { role: 'user', content: input, timestamp: new Date().toISOString() };
+
+    const newUserMsg = {
+      role: 'user',
+      content: input,
+      timestamp: new Date().toISOString(),
+    };
     setMessages((prev) => [...prev, newUserMsg]);
     setLoading(true);
+
     try {
       const { data: raw } = await axios.post(WEBHOOK_URL, {
         message: input,
         sessionId: sessionStorage.getItem('sessionId'),
-      }, { baseURL: window.location.origin });
+      }, {
+        baseURL: window.location.origin
+      });
 
+      // 🔍 Algunos n8n workflows devuelven { response: ... }
       const agentRaw = raw.response ?? raw;
+
       let parsed = agentRaw;
+
+      // Si viene como array con .output (OpenAI tools) → tomar .output
       if (Array.isArray(agentRaw) && agentRaw[0]?.output) {
         parsed = agentRaw[0].output;
       }
-      const agentMsg = { role: 'agent', content: parsed, timestamp: new Date().toISOString() };
+
+      const agentMsg = {
+        role: 'agent',
+        content: parsed,
+        timestamp: new Date().toISOString(),
+      };
       setMessages((prev) => [...prev, agentMsg]);
     } catch (err) {
       const errorMsg = {
@@ -122,6 +177,7 @@ export default function ChatPage() {
       };
       setMessages((prev) => [...prev, errorMsg]);
     }
+
     setInput('');
     setLoading(false);
   };
@@ -145,30 +201,50 @@ export default function ChatPage() {
       : null;
   };
 
+  // 🆕 FUNCIÓN PARA DETECTAR Y PROCESAR GRÁFICOS MIXTOS
   const processChartPayload = (parsedContent) => {
-    if (parsedContent?.chart_type === 'mixed' && parsedContent.values) {
-      const isValidMixed = Array.isArray(parsedContent.values) &&
-        parsedContent.values.every(serie =>
-          serie.hasOwnProperty('type') &&
-          serie.hasOwnProperty('data') &&
+    // Verificar si es un gráfico mixto
+    if (parsedContent.chart_type === 'mixed' && parsedContent.values) {
+      // Validar estructura de gráfico mixto
+      const isValidMixed = Array.isArray(parsedContent.values) && 
+        parsedContent.values.every(serie => 
+          serie.hasOwnProperty('type') && 
+          serie.hasOwnProperty('data') && 
           (serie.hasOwnProperty('name') || serie.hasOwnProperty('label'))
         );
-      if (isValidMixed) return parsedContent;
+
+      if (isValidMixed) {
+        console.log('🎯 Gráfico mixto detectado:', parsedContent);
+        return parsedContent;
+      }
     }
+
+    // Procesar gráficos existentes (sin cambios)
     return parsedContent;
   };
 
+  // 🆕 Función mejorada para iniciar el proceso de guardado
   const initiateChartSave = (chartData) => {
     setCurrentChartToSave(chartData);
     setShowCategoryModal(true);
   };
 
+  // 🆕 Función para guardar el gráfico en la categoría seleccionada
   const saveChartToCategory = async () => {
-    if (!selectedCategory || !currentChartToSave) { alert('Por favor selecciona una categoría'); return; }
+    if (!selectedCategory || !currentChartToSave) {
+      alert('Por favor selecciona una categoría');
+      return;
+    }
+
     try {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) { alert('Debes iniciar sesión para guardar gráficos'); return; }
+      
+      if (userError || !user) {
+        alert('Debes iniciar sesión para guardar gráficos');
+        return;
+      }
 
+      // 1. Guardar el gráfico
       const chartData = {
         title: currentChartToSave.title,
         chart_type: currentChartToSave.chart_type,
@@ -176,26 +252,43 @@ export default function ChatPage() {
         values: currentChartToSave.values,
         sql: currentChartToSave.sql,
       };
+
+      // Agregar configuración de ejes si es gráfico mixto
       if (currentChartToSave.chart_type === 'mixed' && currentChartToSave.axes) {
         chartData.axes = currentChartToSave.axes;
       }
 
       const { data: graficoData, error: graficoError } = await supabase
-        .from('graficos').insert(chartData).select('id').single();
-      if (graficoError) throw new Error('Error guardando gráfico: ' + graficoError.message);
+        .from('graficos')
+        .insert(chartData)
+        .select('id')
+        .single();
 
-      const { error: dashboardError } = await supabase.from('dashboard').insert({
-        grafico_id: graficoData.id,
-        user_id: user.id,
-        category_id: selectedCategory.id,
-        name: currentChartToSave.title || 'Gráfico sin nombre'
-      });
-      if (dashboardError) throw new Error('Error guardando en dashboard: ' + dashboardError.message);
+      if (graficoError) {
+        throw new Error('Error guardando gráfico: ' + graficoError.message);
+      }
+
+      // 2. Asociar al dashboard en la categoría seleccionada
+      const { error: dashboardError } = await supabase
+        .from('dashboard')
+        .insert({
+          grafico_id: graficoData.id,
+          user_id: user.id,
+          category_id: selectedCategory.id,
+          name: currentChartToSave.title || 'Gráfico sin nombre'
+        });
+
+      if (dashboardError) {
+        throw new Error('Error guardando en dashboard: ' + dashboardError.message);
+      }
 
       alert(`✅ Gráfico guardado exitosamente en "${selectedCategory.name}"`);
+      
+      // Resetear estados
       setShowCategoryModal(false);
       setCurrentChartToSave(null);
       setSelectedCategory(null);
+      
     } catch (err) {
       console.error('Error al guardar gráfico:', err);
       alert('Error: ' + err.message);
@@ -203,16 +296,18 @@ export default function ChatPage() {
   };
 
   /* --------------------------------------------------
-   *  🎨  RENDER DE UN CHART INDIVIDUAL (helper)
+   *  ✅ HELPER: render de UN gráfico individual
+   *     Reutilizado tanto para gráfico único como para
+   *     cada elemento dentro de múltiples gráficos.
    * -------------------------------------------------- */
-  const renderSingleChart = (chartData, idx) => (
-    <div key={idx} className="mt-4 border-t border-black/10 pt-4 first:border-0 first:pt-0">
+  const renderSingleChart = (chartData, chartIdx) => (
+    <div key={chartIdx} className="mt-4 border-t border-black/10 pt-4 first:border-0 first:pt-0">
       {/* Explicación textual */}
       {chartData.respuesta && (
         <div className="text-sm mb-2">{chartData.respuesta}</div>
       )}
 
-      {/* Badge para mixtos */}
+      {/* Badge tipo mixto */}
       {chartData.chart_type === 'mixed' && (
         <div className="text-xs mb-2 px-2 py-1 bg-purple-100 text-purple-800 rounded-full inline-block">
           📊 Gráfico Mixto (Líneas + Barras)
@@ -224,8 +319,10 @@ export default function ChatPage() {
         <p className="text-sm font-semibold mb-1">{chartData.title}</p>
       )}
 
+      {/* Gráfico inline */}
       <ChartInline data={chartData} />
 
+      {/* Botón guardar */}
       <button
         onClick={() => initiateChartSave(chartData)}
         className="mt-3 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2"
@@ -244,7 +341,9 @@ export default function ChatPage() {
     if (typeof parsedContent === 'string') {
       const match = parsedContent.match(/\{[\s\S]*\}/);
       if (match) {
-        try { parsedContent = JSON.parse(match[0]); } catch (_) { /* ignora */ }
+        try {
+          parsedContent = JSON.parse(match[0]);
+        } catch (_) {/* ignora si no es JSON válido */}
       }
     }
 
@@ -256,22 +355,26 @@ export default function ChatPage() {
       parsedContent = parsedContent.response_0.chart_payload;
     }
 
-    // 1.c) Procesar gráficos mixtos
-    parsedContent = processChartPayload(parsedContent);
+    // 1.c) Procesar gráficos mixtos (solo si tiene chart_type)
+    if (parsedContent && typeof parsedContent === 'object' && parsedContent.chart_type) {
+      parsedContent = processChartPayload(parsedContent);
+    }
 
     /* --------------------------------------------------
-     *  🎨  DETECTAR TIPO DE RESPUESTA
+     *  🎨  DECIDIR QUÉ COMPONENTE USAR
      * -------------------------------------------------- */
     const asIframe =
       typeof parsedContent === 'string' ? extractIframe(parsedContent) : null;
 
-    // ✅ NUEVO: detectar múltiples gráficos
+    // ✅ MÚLTIPLES GRÁFICOS: el agente devuelve { "charts": [...] }
     const isMultiChartPayload =
       parsedContent &&
       typeof parsedContent === 'object' &&
       Array.isArray(parsedContent.charts) &&
       parsedContent.charts.length > 0;
 
+    // GRÁFICO ÚNICO: tiene labels + values directamente
+    // Se excluye explícitamente el caso multi para evitar colisión
     const isChartPayload =
       !isMultiChartPayload &&
       parsedContent &&
@@ -308,7 +411,7 @@ export default function ChatPage() {
             <span className="font-semibold">{isUser ? 'Tú' : 'Tronix'}</span>
           </div>
 
-          {/* ----- Iframe / Multi-Chart / Single Chart / Texto ----- */}
+          {/* ----- 📈 Iframe / Multi-Chart / Single Chart / Texto ----- */}
           {asIframe ? (
             <>
               <div
@@ -322,8 +425,8 @@ export default function ChatPage() {
 
           ) : isMultiChartPayload ? (
             /* ✅ MÚLTIPLES GRÁFICOS */
-            <div className="mt-2 space-y-2">
-              <p className="text-sm font-semibold">
+            <div className="mt-2">
+              <p className="text-sm font-semibold mb-1">
                 📊 {parsedContent.charts.length} gráficos generados:
               </p>
               {parsedContent.charts.map((chart, chartIdx) =>
@@ -332,25 +435,8 @@ export default function ChatPage() {
             </div>
 
           ) : isChartPayload ? (
-            /* GRÁFICO ÚNICO */
-            <>
-              {parsedContent.respuesta && (
-                <div className="text-sm mt-2">{parsedContent.respuesta}</div>
-              )}
-              {parsedContent.chart_type === 'mixed' && (
-                <div className="text-xs mb-2 px-2 py-1 bg-purple-100 text-purple-800 rounded-full inline-block">
-                  📊 Gráfico Mixto (Líneas + Barras)
-                </div>
-              )}
-              <ChartInline data={parsedContent} />
-              <button
-                onClick={() => initiateChartSave(parsedContent)}
-                className="mt-3 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2"
-              >
-                <FaFolder />
-                💾 Guardar en Dashboard
-              </button>
-            </>
+            /* GRÁFICO ÚNICO — mismo helper */
+            renderSingleChart(parsedContent, 0)
 
           ) : (
             /* TEXTO PURO */
@@ -370,11 +456,13 @@ export default function ChatPage() {
             </div>
           )}
 
-          {/* ----- ⭐ Acciones usuario ----- */}
+          {/* ----- ⭐ Acciones ----- */}
           {isUser && (
             <button
               onClick={async () => {
-                const { data: { user } } = await supabase.auth.getUser();
+                const {
+                  data: { user },
+                } = await supabase.auth.getUser();
                 if (!user) return alert('Debes iniciar sesión para guardar.');
                 await supabase.from('preguntas_frecuentes').insert({
                   user_id: user.id,
@@ -390,7 +478,10 @@ export default function ChatPage() {
           )}
 
           <div className="text-xs text-right mt-2 text-gray-600 dark:text-gray-300">
-            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {new Date(msg.timestamp).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
           </div>
         </div>
       </motion.div>
@@ -411,10 +502,22 @@ export default function ChatPage() {
           </span>
         </div>
         <div className="flex gap-4 text-sm font-medium">
-          <a href="/chat" className="text-[#D2C900] dark:text-[#D2C900] hover:underline font-bold">🌲 Chat Tronix</a>
-          <a href="/dashboards" className="text-[#5E564D] dark:text-white hover:underline">📊 Mis Dashboards</a>
-          <a href="/panel-ejecutivo" className="text-[#5E564D] dark:text-white hover:underline">📈 Panel Ejecutivo</a>
-          <a href="/" onClick={() => supabase.auth.signOut()} className="text-[#5E564D] dark:text-red-400 hover:underline">🚪 Cerrar sesión</a>
+          <a href="/chat" className="text-[#D2C900] dark:text-[#D2C900] hover:underline font-bold">
+            🌲 Chat Tronix
+          </a>
+          <a href="/dashboards" className="text-[#5E564D] dark:text-white hover:underline">
+            📊 Mis Dashboards
+          </a>
+          <a href="/panel-ejecutivo" className="text-[#5E564D] dark:text-white hover:underline">
+            📈 Panel Ejecutivo
+          </a>
+          <a
+            href="/"
+            onClick={() => supabase.auth.signOut()}
+            className="text-[#5E564D] dark:text-red-400 hover:underline"
+          >
+            🚪 Cerrar sesión
+          </a>
         </div>
       </div>
 
@@ -422,14 +525,30 @@ export default function ChatPage() {
       <div className="bg-white/90 dark:bg-[#1c2e1f]/90 p-6 rounded-xl shadow-lg max-w-4xl mx-auto border border-gray-200 dark:border-gray-700 backdrop-blur-sm">
         {/* Preguntas frecuentes */}
         <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-white mb-2">📌 Tus preguntas frecuentes:</h3>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-white mb-2">
+            📌 Tus preguntas frecuentes:
+          </h3>
           {frequentQuestions.length ? (
             <div className="flex flex-wrap gap-2">
               {frequentQuestions.map((q) => (
-                <div key={q.id} className="flex items-center bg-[#FDF3BF] text-[#5E564D] px-3 py-1 rounded text-xs font-medium">
-                  <button onClick={() => setInput(q.pregunta)} className="hover:underline mr-2">{q.pregunta}</button>
+                <div
+                  key={q.id}
+                  className="flex items-center bg-[#FDF3BF] text-[#5E564D] px-3 py-1 rounded text-xs font-medium"
+                >
                   <button
-                    onClick={() => supabase.from('preguntas_frecuentes').delete().eq('id', q.id).then(fetchFrequentQuestions)}
+                    onClick={() => setInput(q.pregunta)}
+                    className="hover:underline mr-2"
+                  >
+                    {q.pregunta}
+                  </button>
+                  <button
+                    onClick={() =>
+                      supabase
+                        .from('preguntas_frecuentes')
+                        .delete()
+                        .eq('id', q.id)
+                        .then(fetchFrequentQuestions)
+                    }
                     className="text-red-500 hover:text-red-700 ml-1"
                   >
                     <FaTrashAlt className="text-xs" />
@@ -438,7 +557,9 @@ export default function ChatPage() {
               ))}
             </div>
           ) : (
-            <p className="text-xs text-gray-500 dark:text-gray-400">No tienes preguntas guardadas todavía.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              No tienes preguntas guardadas todavía.
+            </p>
           )}
         </div>
 
@@ -446,7 +567,9 @@ export default function ChatPage() {
         <div className="space-y-4 mb-4">
           <AnimatePresence>{messages.map(renderMessage)}</AnimatePresence>
           {loading && (
-            <div className="text-center text-sm text-gray-500 dark:text-gray-400">Tronix está pensando...</div>
+            <div className="text-center text-sm text-gray-500 dark:text-gray-400">
+              Tronix está pensando...
+            </div>
           )}
           <div ref={chatEndRef} />
         </div>
@@ -468,24 +591,34 @@ export default function ChatPage() {
         </button>
       </div>
 
-      {/* MODAL SELECTOR DE CATEGORÍAS */}
+      {/* 🆕 MODAL SELECTOR DE CATEGORÍAS */}
       {showCategoryModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full border border-gray-200 dark:border-gray-700">
+            {/* Header del modal */}
             <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
               <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                <FaFolder /> Seleccionar Dashboard
+                <FaFolder />
+                Seleccionar Dashboard
               </h2>
-              <button
-                onClick={() => { setShowCategoryModal(false); setCurrentChartToSave(null); setSelectedCategory(null); }}
+              <button 
+                onClick={() => {
+                  setShowCategoryModal(false);
+                  setCurrentChartToSave(null);
+                  setSelectedCategory(null);
+                }}
                 className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-xl"
               >
                 <FaTimes />
               </button>
             </div>
 
+            {/* Lista de categorías */}
             <div className="p-6">
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">¿En qué dashboard quieres guardar este gráfico?</p>
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                ¿En qué dashboard quieres guardar este gráfico?
+              </p>
+              
               <div className="space-y-2 max-h-60 overflow-y-auto">
                 {categories.map((category) => (
                   <div
@@ -500,7 +633,9 @@ export default function ChatPage() {
                     <div className="flex items-center gap-3">
                       <div className="text-2xl">{category.icon}</div>
                       <div className="flex-1">
-                        <div className="font-medium text-gray-800 dark:text-white">{category.name}</div>
+                        <div className="font-medium text-gray-800 dark:text-white">
+                          {category.name}
+                        </div>
                         <div className="text-xs text-gray-500 dark:text-gray-400">
                           {category.chart_count} gráfico{category.chart_count !== 1 ? 's' : ''}
                         </div>
@@ -510,22 +645,29 @@ export default function ChatPage() {
                 ))}
               </div>
 
+              {/* Botón para crear nueva categoría */}
               <button
                 onClick={() => setShowCreateCategory(true)}
                 className="w-full mt-4 p-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 hover:border-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors flex items-center justify-center gap-2"
               >
-                <FaPlus /> Crear nueva categoría
+                <FaPlus />
+                Crear nueva categoría
               </button>
             </div>
 
+            {/* Footer del modal */}
             <div className="flex gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
-              <button
-                onClick={() => { setShowCategoryModal(false); setCurrentChartToSave(null); setSelectedCategory(null); }}
+              <button 
+                onClick={() => {
+                  setShowCategoryModal(false);
+                  setCurrentChartToSave(null);
+                  setSelectedCategory(null);
+                }}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancelar
               </button>
-              <button
+              <button 
                 onClick={saveChartToCategory}
                 disabled={!selectedCategory}
                 className="flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
@@ -537,38 +679,48 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* MODAL CREAR CATEGORÍA RÁPIDA */}
+      {/* 🆕 MODAL PARA CREAR CATEGORÍA RÁPIDA */}
       {showCreateCategory && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-sm w-full border border-gray-200 dark:border-gray-700">
             <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-bold text-gray-800 dark:text-white">➕ Nueva Categoría</h3>
-              <button onClick={() => setShowCreateCategory(false)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+              <h3 className="text-lg font-bold text-gray-800 dark:text-white">
+                ➕ Nueva Categoría
+              </h3>
+              <button 
+                onClick={() => setShowCreateCategory(false)}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
                 <FaTimes />
               </button>
             </div>
 
             <div className="p-4 space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Nombre *
+                </label>
                 <input
                   type="text"
                   value={newCategory.name}
-                  onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
+                  onChange={(e) => setNewCategory({...newCategory, name: e.target.value})}
                   placeholder="Ej: Producción, Ventas..."
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Icono</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Icono
+                </label>
                 <div className="flex gap-1 flex-wrap">
                   {['📊', '🏭', '💰', '📈', '👥', '🎯'].map(emoji => (
                     <button
                       key={emoji}
-                      onClick={() => setNewCategory({ ...newCategory, icon: emoji })}
+                      onClick={() => setNewCategory({...newCategory, icon: emoji})}
                       className={`p-2 text-lg rounded border transition-all ${
-                        newCategory.icon === emoji
-                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900'
+                        newCategory.icon === emoji 
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900' 
                           : 'border-gray-300 dark:border-gray-600'
                       }`}
                     >
@@ -580,13 +732,13 @@ export default function ChatPage() {
             </div>
 
             <div className="flex gap-2 p-4 border-t border-gray-200 dark:border-gray-700">
-              <button
+              <button 
                 onClick={() => setShowCreateCategory(false)}
                 className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancelar
               </button>
-              <button
+              <button 
                 onClick={createCategory}
                 disabled={!newCategory.name.trim()}
                 className="flex-1 px-3 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
